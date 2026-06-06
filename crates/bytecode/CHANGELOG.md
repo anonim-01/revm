@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [11.0.1](https://github.com/bluealloy/revm/compare/revm-bytecode-v11.0.0...revm-bytecode-v11.0.1) - 2026-05-26
+
+### Other
+
+- mark RETURN and REVERT as memory-modifying ([#3703](https://github.com/bluealloy/revm/pull/3703))
+
+## [11.0.0](https://github.com/bluealloy/revm/compare/revm-bytecode-v10.0.0...revm-bytecode-v11.0.0) - 2026-05-19
+
+### Fixed
+
+- opcode struct panics/safety ([#3566](https://github.com/bluealloy/revm/pull/3566))
+- *(bytecode)* mark `Bytecode::new_analyzed` as unsafe ([#3557](https://github.com/bluealloy/revm/pull/3557))
+
+### Other
+
+- enable and fix clippy::missing_const_for_fn ([#3592](https://github.com/bluealloy/revm/pull/3592))
+- no alloc for empty accounts ([#3590](https://github.com/bluealloy/revm/pull/3590))
+- avoid cloning precompiles on warmup ([#3586](https://github.com/bluealloy/revm/pull/3586))
+- rm op-revm (migrated to ethereum-optimism/optimism) ([#3568](https://github.com/bluealloy/revm/pull/3568))
+
+## [10.0.0](https://github.com/bluealloy/revm/compare/revm-bytecode-v9.0.0...revm-bytecode-v10.0.0) - 2026-04-10
+
+### Added
+
+- add crate-level re-exports for all revm-* dependencies ([#3507](https://github.com/bluealloy/revm/pull/3507))
+
+### Fixed
+
+- make Bytecode Ord consistent with PartialEq and Hash ([#3479](https://github.com/bluealloy/revm/pull/3479))
+
+## [9.0.0](https://github.com/bluealloy/revm/compare/revm-bytecode-v8.0.0...revm-bytecode-v9.0.0) - 2026-03-02
+
+### Added
+
+- Implement EIP-7843 SLOTNUM opcode for Amsterdam ([#3340](https://github.com/bluealloy/revm/pull/3340))
+- Implement EIP-8024 for Amsterdam ([#3223](https://github.com/bluealloy/revm/pull/3223))
+
+### Fixed
+
+- add a test utility function to generate memory input opcodes ([#3280](https://github.com/bluealloy/revm/pull/3280))
+- *(bytecode)* add padding for final opcode missing immediates ([#3338](https://github.com/bluealloy/revm/pull/3338))
+- *(bytecode)* improve analyze_legacy and stack tests ([#3335](https://github.com/bluealloy/revm/pull/3335))
+- the LOG[0-4] CREATE CREATE2 opcode can modify memory ([#3328](https://github.com/bluealloy/revm/pull/3328))
+- *(bytecode)* improve analyze_legacy padding for SWAPN/DUPN/EXCHANGE ([#3332](https://github.com/bluealloy/revm/pull/3332))
+
+### Other
+
+- [**breaking**] flatten Bytecode ([#3375](https://github.com/bluealloy/revm/pull/3375))
+- remove GPL mention and update gmp feature comments ([#3383](https://github.com/bluealloy/revm/pull/3383))
+- *(tests)* remove redundant clones in legacy analysis tests ([#3317](https://github.com/bluealloy/revm/pull/3317))
+
 ## [8.0.0](https://github.com/bluealloy/revm/compare/revm-bytecode-v7.1.1...revm-bytecode-v8.0.0) - 2026-01-15
 
 ### Added

@@ -11,7 +11,8 @@ use context_interface::{
     Block, Cfg, ContextTr, Database,
 };
 use core::cmp::Ordering;
-use primitives::{eip7702, hardfork::SpecId, AddressMap, HashSet, StorageKey, U256};
+use interpreter::InitialAndFloorGas;
+use primitives::{hardfork::SpecId, AddressMap, HashSet, StorageKey, U256};
 use state::AccountInfo;
 
 /// Loads and warms accounts for execution, including precompiles and access list.
@@ -35,7 +36,7 @@ pub fn load_accounts<
         // When precompiles addresses are changed we reset the warmed hashmap to those new addresses.
         context
             .journal_mut()
-            .warm_precompiles(precompiles.warm_addresses().collect());
+            .warm_precompiles(precompiles.warm_addresses());
     }
 
     // Load coinbase
@@ -105,6 +106,9 @@ pub fn validate_account_nonce_and_code(
     if !is_nonce_check_disabled {
         let tx = tx_nonce;
         let state = caller_info.nonce;
+        if tx == u64::MAX && state == u64::MAX {
+            return Err(InvalidTransaction::NonceOverflowInTransaction);
+        }
         match tx.cmp(&state) {
             Ordering::Greater => {
                 return Err(InvalidTransaction::NonceTooHigh { tx, state });
@@ -128,6 +132,12 @@ pub fn calculate_caller_fee(
     block: impl Block,
     cfg: impl Cfg,
 ) -> Result<U256, InvalidTransaction> {
+    // If fee charge is disabled, return the balance as-is without deducting fees.
+    // This is useful for `eth_call` and similar simulation scenarios.
+    if cfg.is_fee_charge_disabled() {
+        return Ok(balance);
+    }
+
     let basefee = block.basefee() as u128;
     let blob_price = block.blob_gasprice().unwrap_or_default();
     let is_balance_check_disabled = cfg.is_balance_check_disabled();
@@ -189,20 +199,47 @@ pub fn apply_eip7702_auth_list<
     ERROR: From<InvalidTransaction> + From<<CTX::Db as Database>::Error>,
 >(
     context: &mut CTX,
+    init_and_floor_gas: &mut InitialAndFloorGas,
 ) -> Result<u64, ERROR> {
     let chain_id = context.cfg().chain_id();
+    let is_eip8037 = context.cfg().is_amsterdam_eip8037_enabled();
     let (tx, journal) = context.tx_journal_mut();
 
     // Return if not EIP-7702 transaction.
     if tx.tx_type() != TransactionType::Eip7702 {
         return Ok(0);
     }
-    apply_auth_list(chain_id, tx.authorization_list(), journal)
+    let (number_of_refunded_accounts, number_of_refunded_bytecodes) =
+        apply_auth_list::<_, ERROR>(chain_id, tx.authorization_list(), journal)?;
+
+    let params = context.cfg().gas_params();
+
+    // EIP-8037: Split per-auth refund into state and regular components. The
+    // state portion is credited back to the reservoir by reducing
+    // `initial_state_gas` (which is what `initial_gas_and_reservoir` deducts
+    // from the reservoir). The regular portion is returned and routed through
+    // the standard refund counter, subject to the 1/5 cap.
+    if is_eip8037 {
+        init_and_floor_gas.state_refund += params
+            .tx_eip7702_state_refund(number_of_refunded_accounts, number_of_refunded_bytecodes);
+    }
+
+    let regular_gas_refund = params
+        .tx_eip7702_auth_refund_regular()
+        .saturating_mul(number_of_refunded_accounts);
+
+    Ok(regular_gas_refund)
 }
 
 /// Apply EIP-7702 style auth list and return number gas refund on already created accounts.
 ///
 /// It is more granular function from [`apply_eip7702_auth_list`] function as it takes only the list, journal and chain id.
+///
+/// The `refund_per_auth` parameter specifies the gas refund per existing account authorization.
+/// By default this is `PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST` (25000 - 12500 = 12500),
+/// but can be configured via [`GasParams::tx_eip7702_auth_refund`](context_interface::cfg::gas_params::GasParams::tx_eip7702_auth_refund).
+///
+/// Return number of refunded account and number of refunded bytecodes (Delegation length is already fixed).
 #[inline]
 pub fn apply_auth_list<
     JOURNAL: JournalTr,
@@ -211,8 +248,9 @@ pub fn apply_auth_list<
     chain_id: u64,
     auth_list: impl Iterator<Item = impl AuthorizationTr>,
     journal: &mut JOURNAL,
-) -> Result<u64, ERROR> {
+) -> Result<(u64, u64), ERROR> {
     let mut refunded_accounts = 0;
+    let mut refunded_bytecodes = 0;
     for authorization in auth_list {
         // 1. Verify the chain id is either 0 or the chain's current ID.
         let auth_chain_id = authorization.chain_id();
@@ -258,6 +296,10 @@ pub fn apply_auth_list<
             refunded_accounts += 1;
         }
 
+        if !authority_acc_info.is_code_hash_empty_or_zero() || authorization.address().is_zero() {
+            refunded_bytecodes += 1;
+        }
+
         // 8. Set the code of `authority` to be `0xef0100 || address`. This is a delegation designation.
         //  * As a special case, if `address` is `0x0000000000000000000000000000000000000000` do not write the designation.
         //    Clear the accounts code and reset the account's code hash to the empty hash `0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470`.
@@ -265,8 +307,35 @@ pub fn apply_auth_list<
         authority_acc.delegate(authorization.address());
     }
 
-    let refunded_gas =
-        refunded_accounts * (eip7702::PER_EMPTY_ACCOUNT_COST - eip7702::PER_AUTH_BASE_COST);
+    Ok((refunded_accounts, refunded_bytecodes))
+}
 
-    Ok(refunded_gas)
+#[cfg(test)]
+mod tests {
+    use super::validate_account_nonce_and_code;
+    use context_interface::result::InvalidTransaction;
+    use state::AccountInfo;
+
+    #[test]
+    fn rejects_transactions_when_sender_nonce_is_max() {
+        let caller_info = AccountInfo {
+            nonce: u64::MAX,
+            ..AccountInfo::default()
+        };
+
+        let err = validate_account_nonce_and_code(&caller_info, u64::MAX, false, false)
+            .expect_err("nonce-max sender should be rejected before execution");
+
+        assert_eq!(err, InvalidTransaction::NonceOverflowInTransaction);
+    }
+
+    #[test]
+    fn allows_matching_non_max_nonce() {
+        let caller_info = AccountInfo {
+            nonce: 7,
+            ..AccountInfo::default()
+        };
+
+        assert!(validate_account_nonce_and_code(&caller_info, 7, false, false).is_ok());
+    }
 }

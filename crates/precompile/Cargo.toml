@@ -1,7 +1,7 @@
 [package]
 name = "revm-precompile"
 description = "Revm Precompiles - Ethereum compatible precompiled contracts"
-version = "32.0.0"
+version = "36.0.3"
 authors.workspace = true
 edition.workspace = true
 keywords.workspace = true
@@ -20,6 +20,7 @@ workspace = true
 [dependencies]
 # revm
 primitives.workspace = true
+context-interface.workspace = true
 
 # modexp precompiles
 aurora-engine-modexp.workspace = true
@@ -62,6 +63,7 @@ ark-bls12-381 = { workspace = true, features = ["curve"] }
 
 # p256verify precompile
 p256 = { workspace = true, features = ["ecdsa"] }
+aws-lc-rs = { workspace = true, optional = true }
 
 # utils
 cfg-if.workspace = true
@@ -72,12 +74,14 @@ criterion.workspace = true
 rand = { workspace = true, features = ["std"] }
 ark-std = { workspace = true }
 rstest.workspace = true
+p256 = { workspace = true, features = ["ecdsa"] }
 
 [features]
 default = ["std", "secp256k1", "blst", "c-kzg", "portable"]
 
 std = [
 	"primitives/std",
+	"context-interface/std",
 	"k256/std",
 	"ripemd/std",
 	"sha2/std",
@@ -115,10 +119,11 @@ blst = ["dep:blst"]
 # Enables the substrate implementation of eip1962
 bn = ["dep:bn"]
 
-# Use GMP (LGPL) for modexp precompile via gmp-mpfr-sys.
-# If you want to use a system libs and dynamic linking of GMP, include `gmp-mpfr-sys` in your project
-# with a `features = ["use-system-libs"]` enabled.
+# Use GMP for accelerated modexp precompile. Dynamically links to libgmp at runtime.
 gmp = ["dep:gmp-mpfr-sys"]
+
+# Use aws-lc-rs as a faster alternative to `p256` for secp256r1 signature verification.
+p256-aws-lc-rs = ["dep:aws-lc-rs"]
 
 [[bench]]
 name = "bench"

@@ -40,6 +40,15 @@ pub struct Context<
     pub error: Result<(), ContextError<DB::Error>>,
 }
 
+#[inline]
+fn sync_cfg_to_journal<CFG: Cfg, JOURNAL: JournalTr>(cfg: &CFG, journal: &mut JOURNAL) {
+    journal.set_spec_id(cfg.spec().into());
+    journal.set_eip7708_config(
+        cfg.is_eip7708_disabled(),
+        cfg.is_eip7708_delayed_burn_disabled(),
+    );
+}
+
 impl<
         BLOCK: Block,
         TX: Transaction,
@@ -141,12 +150,13 @@ impl<
     ///
     /// This will create a new [`Journal`] object.
     pub fn new(db: DB, spec: SPEC) -> Self {
+        let cfg = CfgEnv::new_with_spec(spec);
         let mut journaled_state = JOURNAL::new(db);
-        journaled_state.set_spec_id(spec.clone().into());
+        sync_cfg_to_journal(&cfg, &mut journaled_state);
         Self {
             tx: TX::default(),
             block: BLOCK::default(),
-            cfg: CfgEnv::new_with_spec(spec),
+            cfg,
             local: LOCAL::default(),
             journaled_state,
             chain: Default::default(),
@@ -169,7 +179,7 @@ where
         self,
         mut journal: OJOURNAL,
     ) -> Context<BLOCK, TX, CFG, DB, OJOURNAL, CHAIN, LOCAL> {
-        journal.set_spec_id(self.cfg.spec().into());
+        sync_cfg_to_journal(&self.cfg, &mut journal);
         Context {
             tx: self.tx,
             block: self.block,
@@ -188,9 +198,8 @@ where
         self,
         db: ODB,
     ) -> Context<BLOCK, TX, CFG, ODB, Journal<ODB>, CHAIN, LOCAL> {
-        let spec = self.cfg.spec().into();
         let mut journaled_state = Journal::new(db);
-        journaled_state.set_spec_id(spec);
+        sync_cfg_to_journal(&self.cfg, &mut journaled_state);
         Context {
             tx: self.tx,
             block: self.block,
@@ -208,9 +217,8 @@ where
         db: ODB,
     ) -> Context<BLOCK, TX, CFG, WrapDatabaseRef<ODB>, Journal<WrapDatabaseRef<ODB>>, CHAIN, LOCAL>
     {
-        let spec = self.cfg.spec().into();
         let mut journaled_state = Journal::new(WrapDatabaseRef(db));
-        journaled_state.set_spec_id(spec);
+        sync_cfg_to_journal(&self.cfg, &mut journaled_state);
         Context {
             tx: self.tx,
             block: self.block,
@@ -271,7 +279,7 @@ where
         mut self,
         cfg: OCFG,
     ) -> Context<BLOCK, TX, OCFG, DB, JOURNAL, CHAIN, LOCAL> {
-        self.journaled_state.set_spec_id(cfg.spec().into());
+        sync_cfg_to_journal(&cfg, &mut self.journaled_state);
         Context {
             tx: self.tx,
             block: self.block,
@@ -306,7 +314,7 @@ where
         F: FnOnce(&mut CFG),
     {
         f(&mut self.cfg);
-        self.journaled_state.set_spec_id(self.cfg.spec().into());
+        sync_cfg_to_journal(&self.cfg, &mut self.journaled_state);
         self
     }
 
@@ -382,7 +390,7 @@ where
         F: FnOnce(&mut CFG),
     {
         f(&mut self.cfg);
-        self.journaled_state.set_spec_id(self.cfg.spec().into());
+        sync_cfg_to_journal(&self.cfg, &mut self.journaled_state);
     }
 
     /// Modifies the context chain.
@@ -453,6 +461,10 @@ impl<
     #[inline]
     fn gas_params(&self) -> &GasParams {
         self.cfg().gas_params()
+    }
+
+    fn is_amsterdam_eip8037_enabled(&self) -> bool {
+        self.cfg().is_amsterdam_eip8037_enabled()
     }
 
     fn block_number(&self) -> U256 {

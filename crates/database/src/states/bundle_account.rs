@@ -34,7 +34,7 @@ pub struct BundleAccount {
 
 impl BundleAccount {
     /// Create new BundleAccount.
-    pub fn new(
+    pub const fn new(
         original_info: Option<AccountInfo>,
         present_info: Option<AccountInfo>,
         storage: StorageWithOriginalValues,
@@ -75,7 +75,7 @@ impl BundleAccount {
     }
 
     /// Was this account destroyed.
-    pub fn was_destroyed(&self) -> bool {
+    pub const fn was_destroyed(&self) -> bool {
         self.status.was_destroyed()
     }
 
@@ -146,6 +146,7 @@ impl BundleAccount {
         let extend_storage =
             |this_storage: &mut StorageWithOriginalValues,
              storage_update: StorageWithOriginalValues| {
+                this_storage.reserve(storage_update.len());
                 for (key, value) in storage_update {
                     this_storage.entry(key).or_insert(value).present_value = value.present_value;
                 }

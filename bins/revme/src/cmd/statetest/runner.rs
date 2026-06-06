@@ -8,7 +8,7 @@ use revm::{
     inspector::{inspectors::TracerEip3155, InspectCommitEvm},
     primitives::{hardfork::SpecId, Bytes, B256, U256},
     statetest_types::{SpecName, Test, TestSuite, TestUnit},
-    Context, ExecuteCommitEvm, MainBuilder, MainContext,
+    Context, ExecuteCommitEvm, InspectEvm, MainBuilder, MainContext,
 };
 use serde_json::json;
 use std::{
@@ -76,11 +76,8 @@ fn skip_test(path: &Path) -> bool {
 
     matches!(
         name,
-        // Test check if gas price overflows, we handle this correctly but does not match tests specific exception.
-        | "CreateTransactionHighNonce.json"
-
         // Test with some storage check.
-        | "RevertInCreateInInit_Paris.json"
+        "RevertInCreateInInit_Paris.json"
         | "RevertInCreateInInit.json"
         | "dynamicAccountOverwriteEmpty.json"
         | "dynamicAccountOverwriteEmpty_Paris.json"
@@ -144,7 +141,7 @@ fn build_json_output(
         "stateRoot": validation.state_root,
         "logsRoot": validation.logs_root,
         "output": exec_result.as_ref().ok().and_then(|r| r.output().cloned()).unwrap_or_default(),
-        "gasUsed": exec_result.as_ref().ok().map(|r| r.gas_used()).unwrap_or_default(),
+        "gasUsed": exec_result.as_ref().ok().map(|r| r.tx_gas_used()).unwrap_or_default(),
         "pass": error.is_none(),
         "errorMsg": error.unwrap_or_default(),
         "evmResult": format_evm_result(exec_result),
@@ -400,9 +397,7 @@ pub fn execute_test_suite(
 
 fn execute_single_test(ctx: TestExecutionContext) -> Result<(), TestErrorKind> {
     // Prepare state
-    let mut cache = ctx.cache_state.clone();
-    let spec = ctx.cfg.spec();
-    cache.set_state_clear_flag(spec.is_enabled_in(SpecId::SPURIOUS_DRAGON));
+    let cache = ctx.cache_state.clone();
     let mut state = database::State::builder()
         .with_cached_prestate(cache)
         .with_bundle_update()
@@ -447,8 +442,7 @@ fn debug_failed_test(ctx: DebugContext) {
     println!("\nTraces:");
 
     // Re-run with tracing
-    let mut cache = ctx.cache_state.clone();
-    cache.set_state_clear_flag(ctx.cfg.spec().is_enabled_in(SpecId::SPURIOUS_DRAGON));
+    let cache = ctx.cache_state.clone();
     let mut state = database::State::builder()
         .with_cached_prestate(cache)
         .with_bundle_update()
@@ -461,7 +455,10 @@ fn debug_failed_test(ctx: DebugContext) {
         .with_cfg(ctx.cfg.clone())
         .build_mainnet_with_inspector(TracerEip3155::buffered(stderr()).without_summary());
 
-    let exec_result = evm.inspect_tx_commit(ctx.tx);
+    let _ = evm.inspect_tx(ctx.tx);
+
+    // Execute the transaction without tracing
+    let exec_result = evm.transact_commit(ctx.tx);
 
     println!("\nExecution result: {exec_result:#?}");
     println!("\nExpected exception: {:?}", ctx.test.expect_exception);
@@ -510,19 +507,26 @@ struct TestRunnerState {
     console_bar: Arc<ProgressBar>,
     queue: Arc<Mutex<(usize, Vec<PathBuf>)>>,
     elapsed: Arc<Mutex<Duration>>,
+    errors: Arc<Mutex<Vec<TestError>>>,
 }
 
 impl TestRunnerState {
-    fn new(test_files: Vec<PathBuf>) -> Self {
+    fn new(test_files: Vec<PathBuf>, omit_progress: bool) -> Self {
         let n_files = test_files.len();
+        let draw_target = if omit_progress {
+            ProgressDrawTarget::hidden()
+        } else {
+            ProgressDrawTarget::stdout()
+        };
         Self {
             n_errors: Arc::new(AtomicUsize::new(0)),
             console_bar: Arc::new(ProgressBar::with_draw_target(
                 Some(n_files as u64),
-                ProgressDrawTarget::stdout(),
+                draw_target,
             )),
             queue: Arc::new(Mutex::new((0usize, test_files))),
             elapsed: Arc::new(Mutex::new(Duration::ZERO)),
+            errors: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -556,7 +560,9 @@ fn run_test_worker(state: TestRunnerState, config: TestRunnerConfig) -> Result<(
 
         if let Err(err) = result {
             state.n_errors.fetch_add(1, Ordering::SeqCst);
-            if !config.keep_going {
+            if config.keep_going {
+                state.errors.lock().unwrap().push(err);
+            } else {
                 return Err(err);
             }
         }
@@ -584,10 +590,11 @@ pub fn run(
     trace: bool,
     print_outcome: bool,
     keep_going: bool,
+    omit_progress: bool,
 ) -> Result<(), TestError> {
     let config = TestRunnerConfig::new(single_thread, trace, print_outcome, keep_going);
     let n_files = test_files.len();
-    let state = TestRunnerState::new(test_files);
+    let state = TestRunnerState::new(test_files, omit_progress);
     let num_threads = determine_thread_count(config.single_thread, n_files);
 
     // Spawn worker threads
@@ -633,6 +640,15 @@ pub fn run(
         Ok(())
     } else {
         println!("Encountered {n_errors} errors out of {n_files} total tests");
+
+        let collected_errors = state.errors.lock().unwrap();
+        if !collected_errors.is_empty() {
+            println!("\nFailed tests:");
+            for error in collected_errors.iter() {
+                println!("  {error}");
+            }
+        }
+        drop(collected_errors);
 
         if n_thread_errors == 0 {
             std::process::exit(1);

@@ -1,5 +1,198 @@
 Because this is workspace with multi libraries, tags will be simplified, and with this document you can match version of project with git tag.
 
+# v112
+date: 26.05.2026
+
+Maintenance release bundling the EIP-8037 (CPSB) gas-param work and a few utility additions. Highlights:
+* Bake EIP-8037 CPSB into gas params ([#3714](https://github.com/bluealloy/revm/pull/3714))
+* Add `OnStateHook` for `State<DB>` ([#3710](https://github.com/bluealloy/revm/pull/3710))
+* Mark `RETURN` and `REVERT` as memory-modifying ([#3703](https://github.com/bluealloy/revm/pull/3703))
+* Explain the CPSB acronym in docs ([#3716](https://github.com/bluealloy/revm/pull/3716))
+
+* `revm-primitives`: 24.0.0 -> 24.0.1 (✓ API compatible changes)
+* `revm-bytecode`: 11.0.0 -> 11.0.1 (✓ API compatible changes)
+* `revm-database-interface`: 12.1.0 -> 12.1.1 (✓ API compatible changes)
+* `revm-context-interface`: 19.0.2 -> 19.0.3 (✓ API compatible changes)
+* `revm-state`: 12.0.0 -> 12.0.1 (✓ dependency bump)
+* `revm-context`: 18.0.2 -> 18.0.3 (✓ dependency bump)
+* `revm-database`: 15.0.1 -> 15.0.2 (✓ dependency bump)
+* `revm-interpreter`: 37.0.2 -> 37.0.3 (✓ API compatible changes)
+* `revm-precompile`: 36.0.2 -> 36.0.3 (✓ dependency bump)
+* `revm-handler`: 20.0.2 -> 20.0.3 (✓ dependency bump)
+* `revm-inspector`: 21.0.2 -> 21.0.3 (✓ dependency bump)
+* `revm-statetest-types`: 19.0.2 -> 19.0.3 (✓ dependency bump)
+* `revm`: 40.0.2 -> 40.0.3 (✓ dependency bump)
+* `revme`: 17.0.2 -> 17.0.3 (✓ dependency bump)
+
+# v111
+date: 22.05.2026
+
+Maintenance release. Adds `is_fatal` to `DBErrorMarker` ([#3704](https://github.com/bluealloy/revm/pull/3704)). All transitively dependent crates bumped accordingly.
+
+* `revm-database-interface`: 12.0.0 -> 12.1.0 (✓ API compatible changes)
+* `revm-context-interface`: 19.0.1 -> 19.0.2 (✓ dependency bump)
+* `revm-context`: 18.0.1 -> 18.0.2 (✓ dependency bump)
+* `revm-database`: 15.0.0 -> 15.0.1 (✓ dependency bump)
+* `revm-interpreter`: 37.0.1 -> 37.0.2 (✓ dependency bump)
+* `revm-precompile`: 36.0.1 -> 36.0.2 (✓ dependency bump)
+* `revm-handler`: 20.0.1 -> 20.0.2 (✓ dependency bump)
+* `revm-inspector`: 21.0.1 -> 21.0.2 (✓ dependency bump)
+* `revm-statetest-types`: 19.0.1 -> 19.0.2 (✓ dependency bump)
+* `revm`: 40.0.1 -> 40.0.2 (✓ dependency bump)
+* `revme`: 17.0.1 -> 17.0.2 (✓ dependency bump)
+
+# v110
+date: 21.05.2026
+
+Maintenance release. Removes the dead `refill_amount` tracking field from `GasTracker` and `PrecompileOutput` ([#3699](https://github.com/bluealloy/revm/pull/3699)). All transitively dependent crates bumped accordingly.
+
+* `revm-context-interface`: 19.0.0 -> 19.0.1 (✓ API compatible changes)
+* `revm-context`: 18.0.0 -> 18.0.1 (✓ dependency bump)
+* `revm-interpreter`: 37.0.0 -> 37.0.1 (✓ API compatible changes)
+* `revm-precompile`: 36.0.0 -> 36.0.1 (✓ API compatible changes)
+* `revm-handler`: 20.0.0 -> 20.0.1 (✓ API compatible changes)
+* `revm-inspector`: 21.0.0 -> 21.0.1 (✓ dependency bump)
+* `revm-statetest-types`: 19.0.0 -> 19.0.1 (✓ dependency bump)
+* `revm`: 40.0.0 -> 40.0.1 (✓ dependency bump)
+* `revme`: 17.0.0 -> 17.0.1 (✓ dependency bump)
+
+# v109
+date: 20.05.2026
+
+Bump revm-database-interface major version. All dependent crates bumped accordingly.
+
+* `revm-database-interface`: 11.1.0 -> 12.0.0 (⚠ API breaking changes)
+* `revm-context-interface`: 18.0.0 -> 19.0.0 (⚠ dependency bump)
+* `revm-database`: 14.0.0 -> 15.0.0 (⚠ dependency bump)
+* `revm-context`: 17.0.0 -> 18.0.0 (⚠ dependency bump)
+* `revm-interpreter`: 36.0.0 -> 37.0.0 (⚠ dependency bump)
+* `revm-precompile`: 35.0.0 -> 36.0.0 (⚠ dependency bump)
+* `revm-handler`: 19.0.0 -> 20.0.0 (⚠ dependency bump)
+* `revm-inspector`: 20.0.0 -> 21.0.0 (⚠ dependency bump)
+* `revm-statetest-types`: 18.0.0 -> 19.0.0 (⚠ dependency bump)
+* `revm`: 39.0.0 -> 40.0.0 (⚠ dependency bump)
+* `revm-ee-tests`: 0.2.0 -> 0.3.0 (⚠ dependency bump)
+* `revme`: 16.0.0 -> 17.0.0 (⚠ dependency bump)
+
+# v108
+date: 19.05.2026
+
+Prep for Amsteradam, bal-devnet-7 version (EIP-8037)
+
+* `revm-primitives`: 23.0.0 -> 24.0.0 (⚠ API breaking changes)
+* `revm-bytecode`: 10.0.0 -> 11.0.0 (⚠ API breaking changes)
+* `revm-state`: 11.0.1 -> 12.0.0 (⚠ API breaking changes)
+* `revm-database-interface`: 11.0.1 -> 11.1.0 (✓ API compatible changes)
+* `revm-context-interface`: 17.0.1 -> 18.0.0 (⚠ API breaking changes)
+* `revm-context`: 16.0.1 -> 17.0.0 (⚠ API breaking changes)
+* `revm-database`: 13.0.1 -> 14.0.0 (✓ API compatible changes)
+* `revm-interpreter`: 35.0.1 -> 36.0.0 (⚠ API breaking changes)
+* `revm-precompile`: 34.0.0 -> 35.0.0 (⚠ API breaking changes)
+* `revm-handler`: 18.1.0 -> 19.0.0 (⚠ API breaking changes)
+* `revm-inspector`: 19.0.0 -> 20.0.0 (⚠ API breaking changes)
+* `revm-statetest-types`: 17.0.1 -> 18.0.0 (✓ API compatible changes)
+* `revm`: 38.0.0 -> 39.0.0 (✓ API compatible changes)
+* `revme`: 15.0.0 -> 16.0.0 (✓ API compatible changes)
+
+# v107
+date: 17.04.2026
+
+Maintanance release, utility changes.
+
+* `revm-state`: 11.0.0 -> 11.0.1 (✓ API compatible changes)
+* `revm-context-interface`: 17.0.0 -> 17.0.1 (✓ API compatible changes)
+* `revm-interpreter`: 35.0.0 -> 35.0.1 (✓ API compatible changes)
+* `revm-precompile`: 33.0.0 -> 34.0.0 (✓ API compatible changes)
+* `revm-handler`: 18.0.0 -> 19.0.0 (✓ API compatible changes)
+* `revm-inspector`: 18.0.0 -> 19.0.0 (✓ API compatible changes)
+* `revm-database-interface`: 11.0.0 -> 11.0.1
+* `revm-context`: 16.0.0 -> 16.0.1
+* `revm-database`: 13.0.0 -> 13.0.1
+* `revm-statetest-types`: 17.0.0 -> 17.0.1
+* `revm`: 37.0.0 -> 38.0.0
+* `revme`: 14.0.0 -> 15.0.0
+* `op-revm`: 18.0.0 -> 19.0.0
+
+# v106
+date 10.04.2026
+
+Eth devnet3. EIP-8037 State gas support
+
+* `revm-primitives`: 22.1.0 -> 23.0.0 (⚠ API breaking changes)
+* `revm-bytecode`: 9.0.0 -> 10.0.0 (✓ API compatible changes)
+* `revm-database-interface`: 10.0.0 -> 11.0.0 (✓ API compatible changes)
+* `revm-context-interface`: 16.0.0 -> 17.0.0 (⚠ API breaking changes)
+* `revm-context`: 15.0.0 -> 16.0.0 (⚠ API breaking changes)
+* `revm-database`: 12.0.0 -> 13.0.0 (⚠ API breaking changes)
+* `revm-interpreter`: 34.0.0 -> 35.0.0 (⚠ API breaking changes)
+* `revm-precompile`: 32.1.0 -> 33.0.0 (⚠ API breaking changes)
+* `revm-handler`: 17.0.0 -> 18.0.0 (⚠ API breaking changes)
+* `revm-inspector`: 17.0.0 -> 18.0.0 (✓ API compatible changes)
+* `revm-statetest-types`: 16.0.0 -> 17.0.0 (✓ API compatible changes)
+* `revme`: 13.0.0 -> 14.0.0 (⚠ API breaking changes)
+* `op-revm`: 17.0.0 -> 18.0.0 (✓ API compatible changes)
+* `revm-state`: 10.0.0 -> 11.0.0
+* `revm`: 36.0.0 -> 37.0.0
+
+# v105
+date: 04.03.2026
+
+Bump revm-database-interface major version. All dependent crates bumped accordingly.
+
+* `revm-database-interface`: 9.0.1 -> 10.0.0 (⚠ API breaking changes)
+* `revm-interpreter`: 33.0.0 -> 34.0.0 (⚠ dependency bump)
+* `revm-database`: 11.0.0 -> 12.0.0 (⚠ dependency bump)
+* `revm-context-interface`: 15.0.0 -> 16.0.0 (⚠ dependency bump)
+* `revm-context`: 14.0.0 -> 15.0.0 (⚠ dependency bump)
+* `revm-handler`: 16.0.0 -> 17.0.0 (⚠ dependency bump)
+* `revm-inspector`: 16.0.0 -> 17.0.0 (⚠ dependency bump)
+* `revm`: 35.0.0 -> 36.0.0 (⚠ dependency bump)
+* `op-revm`: 16.0.0 -> 17.0.0 (⚠ dependency bump)
+* `revm-statetest-types`: 15.0.0 -> 16.0.0 (⚠ dependency bump)
+* `revm-ee-tests`: 0.1.0 -> 0.2.0 (⚠ dependency bump)
+* `revme`: 12.0.0 -> 13.0.0 (⚠ dependency bump)
+
+# v104
+date: 03.03.2026
+
+Amsterdam hardfork support (EIP-7708, EIP-7843, EIP-8024), ResultGas struct refactor, flatten Bytecode, logs added to Revert/Halt variants, BAL (Block Access List) support, O(1) block hash cache, various performance improvements and bug fixes.
+
+* `revm-primitives`: 22.0.0 -> 22.1.0 (✓ API compatible changes)
+* `revm-bytecode`: 8.0.0 -> 9.0.0 (⚠ API breaking changes)
+* `revm-state`: 9.0.0 -> 10.0.0 (⚠ API breaking changes)
+* `revm-database-interface`: 9.0.0 -> 9.0.1 (✓ API compatible changes)
+* `revm-context-interface`: 14.0.0 -> 15.0.0 (⚠ API breaking changes)
+* `revm-context`: 13.0.0 -> 14.0.0 (⚠ API breaking changes)
+* `revm-database`: 10.0.0 -> 11.0.0 (⚠ API breaking changes)
+* `revm-interpreter`: 32.0.0 -> 33.0.0 (⚠ API breaking changes)
+* `revm-precompile`: 32.0.0 -> 32.1.0 (✓ API compatible changes)
+* `revm-handler`: 15.0.0 -> 16.0.0 (⚠ API breaking changes)
+* `revm-inspector`: 15.0.0 -> 16.0.0 (⚠ API breaking changes)
+* `revm`: 34.0.0 -> 35.0.0 (⚠ API breaking changes)
+* `op-revm`: 15.0.0 -> 16.0.0 (⚠ API breaking changes)
+* `revm-statetest-types`: 14.0.0 -> 15.0.0 (⚠ API breaking changes)
+* `revme`: 11.0.0 -> 12.0.0 (⚠ API breaking changes)
+
+# v103
+date: 15.01.2026
+
+Major release with GasParams moved to Cfg, new gas params for tx initial gas and code deposit, flatten Bytecode, performance improvements and bug fixes.
+
+* `revm-primitives`: 21.0.2 -> 22.0.0 (⚠ API breaking changes)
+* `revm-bytecode`: 7.1.1 -> 8.0.0 (⚠ API breaking changes)
+* `revm-database-interface`: 8.0.5 -> 9.0.0 (⚠ API breaking changes)
+* `revm-context-interface`: 13.1.0 -> 14.0.0 (⚠ API breaking changes)
+* `revm-context`: 12.1.0 -> 13.0.0 (⚠ API breaking changes)
+* `revm-database`: 9.0.6 -> 10.0.0 (⚠ API breaking changes)
+* `revm-interpreter`: 31.1.0 -> 32.0.0 (⚠ API breaking changes)
+* `revm-precompile`: 31.0.0 -> 32.0.0 (⚠ API breaking changes)
+* `revm-handler`: 14.1.0 -> 15.0.0 (⚠ API breaking changes)
+* `revm-inspector`: 14.1.0 -> 15.0.0 (⚠ API breaking changes)
+* `revm`: 33.1.0 -> 34.0.0 (⚠ API breaking changes)
+* `op-revm`: 14.1.0 -> 15.0.0 (⚠ API breaking changes)
+* `revm-statetest-types`: 13.1.0 -> 14.0.0 (⚠ API breaking changes)
+* `revme`: 10.0.2 -> 11.0.0 (⚠ API breaking changes)
+
 # v102
 date: 14.11.2025
 

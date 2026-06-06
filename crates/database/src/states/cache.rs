@@ -2,9 +2,9 @@ use super::{
     plain_account::PlainStorage, transition_account::TransitionAccount, CacheAccount, PlainAccount,
 };
 use bytecode::Bytecode;
-use primitives::{Address, AddressMap, B256Map, HashMap};
-use state::{Account, AccountInfo};
-use std::vec::Vec;
+use primitives::{hash_map, Address, AddressMap, B256Map, HashMap};
+use state::{Account, AccountInfo, EvmStorage};
+use std::{borrow::Cow, vec::Vec};
 
 /// Cache state contains both modified and original values
 ///
@@ -20,29 +20,27 @@ pub struct CacheState {
     pub accounts: AddressMap<CacheAccount>,
     /// Created contracts
     pub contracts: B256Map<Bytecode>,
-    /// Has EIP-161 state clear enabled (Spurious Dragon hardfork)
-    pub has_state_clear: bool,
 }
 
 impl Default for CacheState {
     fn default() -> Self {
-        Self::new(true)
+        Self::new()
     }
 }
 
 impl CacheState {
     /// Creates a new default state.
-    pub fn new(has_state_clear: bool) -> Self {
+    pub fn new() -> Self {
         Self {
             accounts: HashMap::default(),
             contracts: HashMap::default(),
-            has_state_clear,
         }
     }
 
-    /// Sets state clear flag. EIP-161.
-    pub fn set_state_clear_flag(&mut self, has_state_clear: bool) {
-        self.has_state_clear = has_state_clear;
+    /// Clear the cache state.
+    pub fn clear(&mut self) {
+        self.accounts.clear();
+        self.contracts.clear();
     }
 
     /// Helper function that returns all accounts.
@@ -93,29 +91,38 @@ impl CacheState {
     pub fn apply_evm_state<F>(
         &mut self,
         evm_state: impl IntoIterator<Item = (Address, Account)>,
-        inspect: F,
-    ) -> Vec<(Address, TransitionAccount)>
+        mut inspect: F,
+    ) -> Vec<(Address, TransitionAccount<Option<Cow<'_, EvmStorage>>>)>
     where
         F: FnMut(&Address, &Account),
     {
-        self.apply_evm_state_iter(evm_state, inspect).collect()
+        self.apply_evm_state_iter(
+            evm_state
+                .into_iter()
+                .map(|(address, account)| (address, Cow::Owned(account))),
+            |address, account| {
+                inspect(address, account);
+            },
+        )
+        .collect()
     }
 
     /// Applies output of revm execution and creates an iterator of account transitions.
     #[inline]
-    pub(crate) fn apply_evm_state_iter<'a, F, T>(
-        &'a mut self,
+    pub(crate) fn apply_evm_state_iter<'a, 'b, F, T>(
+        &'b mut self,
         evm_state: T,
         mut inspect: F,
-    ) -> impl Iterator<Item = (Address, TransitionAccount)> + use<'a, F, T>
+    ) -> impl Iterator<Item = (Address, TransitionAccount<Option<Cow<'a, EvmStorage>>>)>
+           + use<'a, 'b, F, T>
     where
-        F: FnMut(&Address, &Account),
-        T: IntoIterator<Item = (Address, Account)>,
+        F: FnMut(&Address, &Cow<'a, Account>),
+        T: IntoIterator<Item = (Address, Cow<'a, Account>)>,
     {
         evm_state.into_iter().filter_map(move |(address, account)| {
             inspect(&address, &account);
             self.apply_account_state(address, account)
-                .map(|transition| (address, transition))
+                .map(move |transition| (address, transition))
         })
     }
 
@@ -124,11 +131,7 @@ impl CacheState {
     pub fn pretty_print(&self) -> String {
         let mut output = String::new();
         output.push_str("CacheState:\n");
-        output.push_str(&format!(
-            "  (state_clear_enabled: {}, ",
-            self.has_state_clear
-        ));
-        output.push_str(&format!("accounts: {} total)\n", self.accounts.len()));
+        output.push_str(&format!("  (accounts: {} total)\n", self.accounts.len()));
 
         // Sort accounts by address for consistent output
         let mut accounts: Vec<_> = self.accounts.iter().collect();
@@ -185,20 +188,34 @@ impl CacheState {
     /// Applies updated account state to the cached account.
     ///
     /// Returns account transition if applicable.
-    pub(crate) fn apply_account_state(
+    pub(crate) fn apply_account_state<'a>(
         &mut self,
         address: Address,
-        account: Account,
-    ) -> Option<TransitionAccount> {
+        account: Cow<'a, Account>,
+    ) -> Option<TransitionAccount<Option<Cow<'a, EvmStorage>>>> {
         // Not touched account are never changed.
         if !account.is_touched() {
             return None;
         }
 
-        let this_account = self
-            .accounts
-            .get_mut(&address)
-            .expect("All accounts should be present inside cache");
+        // The account may not be present in the cache when execution happened on top
+        // of a different database. In that case, we insert account into the cache as if it was just loaded.
+        let this_account = match self.accounts.entry(address) {
+            hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            hash_map::Entry::Vacant(entry) => {
+                let cache_account = if account.is_loaded_as_not_existing() {
+                    CacheAccount::new_loaded_not_existing()
+                } else {
+                    let original = account.original_info();
+                    if original.is_empty() {
+                        CacheAccount::new_loaded_empty_eip161(HashMap::default())
+                    } else {
+                        CacheAccount::new_loaded(original, HashMap::default())
+                    }
+                };
+                entry.insert(cache_account)
+            }
+        };
 
         // If it is marked as selfdestructed inside revm
         // we need to changed state to destroyed.
@@ -209,14 +226,6 @@ impl CacheState {
         let is_created = account.is_created();
         let is_empty = account.is_empty();
 
-        // Transform evm storage to storage with previous value.
-        let changed_storage = account
-            .storage
-            .into_iter()
-            .filter(|(_, slot)| slot.is_changed())
-            .map(|(key, slot)| (key, slot.into()))
-            .collect();
-
         // Note: It can happen that created contract get selfdestructed in same block
         // that is why is_created is checked after selfdestructed
         //
@@ -226,7 +235,7 @@ impl CacheState {
         // by just setting storage inside CRATE constructor. Overlap of those contracts
         // is not possible because CREATE2 is introduced later.
         if is_created {
-            return Some(this_account.newly_created(account.info, changed_storage));
+            return Some(this_account.newly_created(account));
         }
 
         // Account is touched, but not selfdestructed or newly created.
@@ -234,16 +243,11 @@ impl CacheState {
         // And when empty account is touched it needs to be removed from database.
         // EIP-161 state clear
         if is_empty {
-            if self.has_state_clear {
-                // Touch empty account.
-                this_account.touch_empty_eip161()
-            } else {
-                // If account is empty and state clear is not enabled we should save
-                // empty account.
-                this_account.touch_create_pre_eip161(changed_storage)
-            }
+            // EIP-161 state clear: touch empty account to mark for removal.
+            // Pre-EIP-161 behavior is handled by the journal in `finalize()`.
+            this_account.touch_empty_eip161()
         } else {
-            Some(this_account.change(account.info, changed_storage))
+            Some(this_account.change(account))
         }
     }
 }

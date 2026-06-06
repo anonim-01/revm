@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [24.0.1](https://github.com/bluealloy/revm/compare/revm-primitives-v24.0.0...revm-primitives-v24.0.1) - 2026-05-26
+
+### Other
+
+- explain CPSB acronym ([#3716](https://github.com/bluealloy/revm/pull/3716))
+
+## [24.0.0](https://github.com/bluealloy/revm/compare/revm-primitives-v23.0.0...revm-primitives-v24.0.0) - 2026-05-19
+
+### Added
+
+- *(eip8037)* Amsterdam bal-devnet-7 ([#3667](https://github.com/bluealloy/revm/pull/3667))
+
+### Other
+
+- remove unused spec ids ([#3649](https://github.com/bluealloy/revm/pull/3649))
+- audit #[allow] attributes ([#3611](https://github.com/bluealloy/revm/pull/3611))
+- *(precompile)* use static OnceLock array for Precompiles init ([#3602](https://github.com/bluealloy/revm/pull/3602))
+- *(primitives)* add SpecId::NEXT, drop num_enum dependency ([#3593](https://github.com/bluealloy/revm/pull/3593))
+- enable and fix clippy::missing_const_for_fn ([#3592](https://github.com/bluealloy/revm/pull/3592))
+- rm op-revm (migrated to ethereum-optimism/optimism) ([#3568](https://github.com/bluealloy/revm/pull/3568))
+
+## [23.0.0](https://github.com/bluealloy/revm/compare/revm-primitives-v22.1.0...revm-primitives-v23.0.0) - 2026-04-10
+
+### Added
+
+- Part of amsterdam devnet3 EIP updates ([#3438](https://github.com/bluealloy/revm/pull/3438))
+
+## [22.1.0](https://github.com/bluealloy/revm/compare/revm-primitives-v22.0.0...revm-primitives-v22.1.0) - 2026-03-02
+
+### Added
+
+- Implement EIP-7708 ETH transfers emit a log ([#3334](https://github.com/bluealloy/revm/pull/3334))
+
+### Fixed
+
+- *(journal)* emit EIP-7708 log for selfdestructed accounts with remaining balance ([#3394](https://github.com/bluealloy/revm/pull/3394))
+
+### Other
+
+- remove GPL mention and update gmp feature comments ([#3383](https://github.com/bluealloy/revm/pull/3383))
+- use fixed bytes hashmaps from alloy-core ([#3358](https://github.com/bluealloy/revm/pull/3358))
+- update default hardfork to Osaka (Ethereum) and Jovian (Optimism) ([#3326](https://github.com/bluealloy/revm/pull/3326))
+
 ## [21.1.0](https://github.com/bluealloy/revm/compare/revm-primitives-v21.0.2...revm-primitives-v21.1.0) - 2026-01-15
 
 ### Added

@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [17.0.3](https://github.com/bluealloy/revm/compare/revme-v17.0.2...revme-v17.0.3) - 2026-05-26
+
+### Other
+
+- updated the following local packages: revm
+
+## [17.0.2](https://github.com/bluealloy/revm/compare/revme-v17.0.1...revme-v17.0.2) - 2026-05-22
+
+### Other
+
+- updated the following local packages: revm
+
+## [17.0.1](https://github.com/bluealloy/revm/compare/revme-v17.0.0...revme-v17.0.1) - 2026-05-21
+
+### Other
+
+- updated the following local packages: revm
+
+## [17.0.0](https://github.com/bluealloy/revm/compare/revme-v15.0.0...revme-v17.0.0) - 2026-05-19
+
+### Other
+
+- remove unused spec ids ([#3649](https://github.com/bluealloy/revm/pull/3649))
+- reject nonce-max senders before execution ([#3531](https://github.com/bluealloy/revm/pull/3531))
+- audit #[allow] attributes ([#3611](https://github.com/bluealloy/revm/pull/3611))
+
+## [15.0.0](https://github.com/bluealloy/revm/compare/revme-v14.0.0...revme-v15.0.0) - 2026-04-17
+
+### Other
+
+- updated the following local packages: revm
+
+## [14.0.0](https://github.com/bluealloy/revm/compare/revme-v13.0.0...revme-v14.0.0) - 2026-04-10
+
+### Added
+
+- add EIP-8037 / TIP-1016 state gas support ([#3406](https://github.com/bluealloy/revm/pull/3406))
+- *(revme)* list all failed tests at the end with --keep-going ([#3491](https://github.com/bluealloy/revm/pull/3491))
+
+### Fixed
+
+- *(revme)* use transact state for debug "State after" output ([#3498](https://github.com/bluealloy/revm/pull/3498))
+- *(revme)* guard unconditional println in blockchaintest for --json mode ([#3500](https://github.com/bluealloy/revm/pull/3500))
+
+### Other
+
+- *(revme)* use alloy-trie instead of triehash ([#3488](https://github.com/bluealloy/revm/pull/3488))
+
+## [13.0.0](https://github.com/bluealloy/revm/compare/revme-v12.0.0...revme-v13.0.0) - 2026-03-04
+
+### Other
+
+- bump revm-database-interface to v10.0.0
+
+## [12.0.0](https://github.com/bluealloy/revm/compare/revme-v11.0.0...revme-v12.0.0) - 2026-03-02
+
+### Added
+
+- *(precompile)* add aws-lc-rs as alternative backend for secp256r1 ([#3451](https://github.com/bluealloy/revm/pull/3451))
+- *(revme)* add --json output flag to evmrunner command ([#3428](https://github.com/bluealloy/revm/pull/3428))
+- *(revme)* validate block gas used in blockchain tests ([#3416](https://github.com/bluealloy/revm/pull/3416))
+- *(revme)* add --omit-progress flag to statetest command ([#3419](https://github.com/bluealloy/revm/pull/3419))
+
+### Other
+
+- move EIP-161 state clear into journal finalize ([#3444](https://github.com/bluealloy/revm/pull/3444))
+- add subcall benchmarks (1000-call variants) ([#3427](https://github.com/bluealloy/revm/pull/3427))
+- use fixed bytes hashmaps from alloy-core ([#3358](https://github.com/bluealloy/revm/pull/3358))
+- update default hardfork to Osaka (Ethereum) and Jovian (Optimism) ([#3326](https://github.com/bluealloy/revm/pull/3326))
+
 ## [11.0.0](https://github.com/bluealloy/revm/compare/revme-v10.0.2...revme-v11.0.0) - 2026-01-15
 
 ### Added

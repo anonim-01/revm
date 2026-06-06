@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [36.0.3](https://github.com/bluealloy/revm/compare/revm-precompile-v36.0.2...revm-precompile-v36.0.3) - 2026-05-26
+
+### Other
+
+- updated the following local packages: revm-primitives, revm-context-interface
+
+## [36.0.2](https://github.com/bluealloy/revm/compare/revm-precompile-v36.0.1...revm-precompile-v36.0.2) - 2026-05-22
+
+### Other
+
+- updated the following local packages: revm-context-interface
+
+## [36.0.1](https://github.com/bluealloy/revm/compare/revm-precompile-v36.0.0...revm-precompile-v36.0.1) - 2026-05-21
+
+### Other
+
+- *(eip8037)* remove dead refill_amount tracking ([#3699](https://github.com/bluealloy/revm/pull/3699))
+
+## [36.0.0](https://github.com/bluealloy/revm/compare/revm-precompile-v34.0.0...revm-precompile-v36.0.0) - 2026-05-19
+
+### Added
+
+- *(eip8037)* Amsterdam bal-devnet-7 ([#3667](https://github.com/bluealloy/revm/pull/3667))
+
+### Fixed
+
+- *(precompile)* tighten cfg on blake2 avx2 module ([#3613](https://github.com/bluealloy/revm/pull/3613))
+- *(precompile)* use SIGMA period 10 in blake2 portable path ([#3616](https://github.com/bluealloy/revm/pull/3616))
+- re-add PrecompileOutput::gas_refunded ([#3574](https://github.com/bluealloy/revm/pull/3574))
+
+### Other
+
+- remove unused spec ids ([#3649](https://github.com/bluealloy/revm/pull/3649))
+- audit #[allow] attributes ([#3611](https://github.com/bluealloy/revm/pull/3611))
+- backport v107 release notes from branch ([#3617](https://github.com/bluealloy/revm/pull/3617))
+- *(precompile)* vendor blake2b_simd for BLAKE2 compression ([#3609](https://github.com/bluealloy/revm/pull/3609))
+- *(precompile)* use static OnceLock array for Precompiles init ([#3602](https://github.com/bluealloy/revm/pull/3602))
+- enable and fix clippy::missing_const_for_fn ([#3592](https://github.com/bluealloy/revm/pull/3592))
+- rm op-revm (migrated to ethereum-optimism/optimism) ([#3568](https://github.com/bluealloy/revm/pull/3568))
+
+## [34.0.0](https://github.com/bluealloy/revm/compare/revm-precompile-v33.0.0...revm-precompile-v34.0.0) - 2026-04-17
+
+### Fixed
+
+- re-add PrecompileOutput::gas_refunded ([#3574](https://github.com/bluealloy/revm/pull/3574))
+
+## [33.0.0](https://github.com/bluealloy/revm/compare/revm-precompile-v32.1.0...revm-precompile-v33.0.0) - 2026-04-10
+
+### Added
+
+- add EIP-8037 / TIP-1016 state gas support ([#3406](https://github.com/bluealloy/revm/pull/3406))
+- add crate-level re-exports for all revm-* dependencies ([#3507](https://github.com/bluealloy/revm/pull/3507))
+
+### Other
+
+- move EIP-8037 gas cap validation into validate_initial_tx_gas ([#3552](https://github.com/bluealloy/revm/pull/3552))
+- *(precompile)* take large array args by reference ([#3524](https://github.com/bluealloy/revm/pull/3524))
+- add secp256r1 (P256) precompile benchmark ([#3525](https://github.com/bluealloy/revm/pull/3525))
+- use AnyError for PrecompileError::Fatal and EVMError::Custom ([#3502](https://github.com/bluealloy/revm/pull/3502))
+- clarify PrecompileError::Fatal vs Other and EVMError::Custom ([#3496](https://github.com/bluealloy/revm/pull/3496))
+
+## [32.1.0](https://github.com/bluealloy/revm/compare/revm-precompile-v32.0.0...revm-precompile-v32.1.0) - 2026-03-02
+
+### Added
+
+- *(precompile)* add aws-lc-rs as alternative backend for secp256r1 ([#3451](https://github.com/bluealloy/revm/pull/3451))
+
+### Fixed
+
+- *(precompile)* use big-endian resize for modexp output padding ([#3432](https://github.com/bluealloy/revm/pull/3432))
+
+### Other
+
+- remove GPL mention and update gmp feature comments ([#3383](https://github.com/bluealloy/revm/pull/3383))
+- *(precompile)* zero-copy scalar conversion in BLS12-381 MSM ([#3359](https://github.com/bluealloy/revm/pull/3359))
+- use fixed bytes hashmaps from alloy-core ([#3358](https://github.com/bluealloy/revm/pull/3358))
+- *(precompiles)* cache trusted setup G2 for kzg ([#3322](https://github.com/bluealloy/revm/pull/3322))
+- rename misleading calc_linear_cost_u32 function ([#3318](https://github.com/bluealloy/revm/pull/3318))
+
 ## [32.0.0](https://github.com/bluealloy/revm/compare/revm-precompile-v31.0.0...revm-precompile-v32.0.0) - 2026-01-15
 
 ### Added

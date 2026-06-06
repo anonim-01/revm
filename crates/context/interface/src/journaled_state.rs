@@ -34,10 +34,30 @@ pub trait JournalTr {
     fn new(database: Self::Database) -> Self;
 
     /// Returns a mutable reference to the database.
-    fn db_mut(&mut self) -> &mut Self::Database;
+    fn db_mut(&mut self) -> &mut Self::Database {
+        self.db_and_state_mut().0
+    }
 
     /// Returns an immutable reference to the database.
-    fn db(&self) -> &Self::Database;
+    fn db(&self) -> &Self::Database {
+        self.db_and_state().0
+    }
+
+    /// Return the mutable current Journaled state.
+    fn evm_state_mut(&mut self) -> &mut Self::State {
+        self.db_and_state_mut().1
+    }
+
+    /// Return the current Journaled state.
+    fn evm_state(&self) -> &Self::State {
+        self.db_and_state().1
+    }
+
+    /// Returns immutable reference to the database and state.
+    fn db_and_state(&self) -> (&Self::Database, &Self::State);
+
+    /// Returns mutable reference to the database and state.
+    fn db_and_state_mut(&mut self) -> (&mut Self::Database, &mut Self::State);
 
     /// Returns the storage value from Journal state.
     ///
@@ -111,13 +131,24 @@ pub trait JournalTr {
     fn warm_coinbase_account(&mut self, address: Address);
 
     /// Warms the precompiles.
-    fn warm_precompiles(&mut self, addresses: AddressSet);
+    fn warm_precompiles(&mut self, addresses: &AddressSet);
 
     /// Returns the addresses of the precompiles.
     fn precompile_addresses(&self) -> &AddressSet;
 
     /// Sets the spec id.
     fn set_spec_id(&mut self, spec_id: SpecId);
+
+    /// Sets EIP-7708 configuration flags.
+    ///
+    /// - `disabled`: Whether EIP-7708 (ETH transfers emit logs) is completely disabled.
+    /// - `delayed_burn_disabled`: Whether delayed burn logging is disabled. When enabled,
+    ///   revm tracks all self-destructed addresses and emits logs for accounts that still
+    ///   have remaining balance at the end of the transaction. This can be disabled for
+    ///   performance reasons as it requires storing and iterating over all self-destructed
+    ///   accounts. When disabled, the logging can be done outside of revm when applying
+    ///   accounts to database state.
+    fn set_eip7708_config(&mut self, disabled: bool, delayed_burn_disabled: bool);
 
     /// Touches the account.
     fn touch_account(&mut self, address: Address);
@@ -193,6 +224,7 @@ pub trait JournalTr {
         address: Address,
     ) -> Result<StateLoad<Self::JournaledAccount<'_>>, <Self::Database as Database>::Error> {
         self.load_account_mut_skip_cold_load(address, false)
+            .map_err(JournalLoadError::unwrap_db_error)
     }
 
     /// Loads the journaled account.
@@ -200,7 +232,10 @@ pub trait JournalTr {
         &mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Self::JournaledAccount<'_>>, <Self::Database as Database>::Error>;
+    ) -> Result<
+        StateLoad<Self::JournaledAccount<'_>>,
+        JournalLoadError<<Self::Database as Database>::Error>,
+    >;
 
     /// Loads the journaled account.
     #[inline]
@@ -320,13 +355,13 @@ pub type JournalLoadErasedError = JournalLoadError<ErasedError>;
 impl<E> JournalLoadError<E> {
     /// Returns true if the error is a database error.
     #[inline]
-    pub fn is_db_error(&self) -> bool {
+    pub const fn is_db_error(&self) -> bool {
         matches!(self, JournalLoadError::DBError(_))
     }
 
     /// Returns true if the error is a cold load skipped.
     #[inline]
-    pub fn is_cold_load_skipped(&self) -> bool {
+    pub const fn is_cold_load_skipped(&self) -> bool {
         matches!(self, JournalLoadError::ColdLoadSkipped)
     }
 
@@ -406,6 +441,8 @@ pub struct JournalCheckpoint {
     pub log_i: usize,
     /// Checkpoint to where on revert we will go back to and revert other journal entries.
     pub journal_i: usize,
+    /// Checkpoint for self-destructed addresses tracking (EIP-7708).
+    pub selfdestructed_i: usize,
 }
 
 /// State load information that contains the data and if the account or storage is cold loaded
@@ -435,7 +472,7 @@ impl<T> DerefMut for StateLoad<T> {
 impl<T> StateLoad<T> {
     /// Returns a new [`StateLoad`] with the given data and cold load status.
     #[inline]
-    pub fn new(data: T, is_cold: bool) -> Self {
+    pub const fn new(data: T, is_cold: bool) -> Self {
         Self { data, is_cold }
     }
 
@@ -476,7 +513,7 @@ pub struct AccountInfoLoad<'a> {
 impl<'a> AccountInfoLoad<'a> {
     /// Creates new [`AccountInfoLoad`] with the given account info, cold load status and empty status.
     #[inline]
-    pub fn new(account: &'a AccountInfo, is_cold: bool, is_empty: bool) -> Self {
+    pub const fn new(account: &'a AccountInfo, is_cold: bool, is_empty: bool) -> Self {
         Self {
             account: Cow::Borrowed(account),
             is_cold,

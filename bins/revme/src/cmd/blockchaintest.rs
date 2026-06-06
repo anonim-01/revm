@@ -314,7 +314,7 @@ fn validate_post_state(
     debug_info: &DebugInfo,
     print_env_on_error: bool,
 ) -> Result<(), TestExecutionError> {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn make_failure(
         state: &mut State<EmptyDB>,
         debug_info: &DebugInfo,
@@ -657,6 +657,7 @@ fn execute_blockchain_test(
             | ForkSpec::CancunToPragueAtTime15k
             | ForkSpec::PragueToOsakaAtTime15k
             | ForkSpec::BPO1ToBPO2AtTime15k
+            | ForkSpec::BPO2ToAmsterdamAtTime15k
     ) {
         eprintln!("⚠️  Skipping transition fork: {:?}", test_case.network);
         return Ok(());
@@ -708,7 +709,9 @@ fn execute_blockchain_test(
 
     // Process each block in the test
     for (block_idx, block) in test_case.blocks.iter().enumerate() {
-        println!("Run block {block_idx}/{}", test_case.blocks.len());
+        if !json_output {
+            println!("Run block {block_idx}/{}", test_case.blocks.len());
+        }
 
         // Check if this block should fail
         let should_fail = block.expect_exception.is_some();
@@ -752,7 +755,18 @@ fn execute_blockchain_test(
         let mut evm = evm_context.build_mainnet_with_inspector(TracerEip3155::new_stdout());
 
         // Pre block system calls
-        pre_block::pre_block_transition(&mut evm, spec_id, parent_block_hash, beacon_root);
+        pre_block::pre_block_transition(&mut evm, spec_id, parent_block_hash, beacon_root)
+            .map_err(|e| TestExecutionError::PreBlockSystemCall {
+                block_idx,
+                error: format!("{e:?}"),
+            })?;
+
+        // Track cumulative gas used across all transactions in this block.
+        // EIP-8037: Split gas accounting into regular (execution) and state gas.
+        let mut cumulative_tx_gas_used: u64 = 0;
+        let mut block_regular_gas_used: u64 = 0;
+        let mut block_state_gas_used: u64 = 0;
+        let mut block_completed = true;
 
         // Execute each transaction in the block
         for (tx_idx, tx) in transactions.iter().enumerate() {
@@ -784,6 +798,7 @@ fn execute_blockchain_test(
                 } else {
                     eprintln!("⚠️  Skipping block {block_idx} due to missing sender");
                 }
+                block_completed = false;
                 break; // Skip to next block
             }
 
@@ -823,6 +838,7 @@ fn execute_blockchain_test(
                             "⚠️  Skipping block {block_idx} due to transaction env creation error: {e}"
                         );
                     }
+                    block_completed = false;
                     break; // Skip to next block
                 }
             };
@@ -872,7 +888,7 @@ fn execute_blockchain_test(
                                 "block": block_idx,
                                 "tx": tx_idx,
                                 "expected_exception": expected_exception,
-                                "gas_used": result.result.gas_used(),
+                                "gas_used": result.result.gas().tx_gas_used(),
                                 "status": "unexpected_success"
                             });
                             print_json(&output);
@@ -881,8 +897,14 @@ fn execute_blockchain_test(
                                 "⚠️  Skipping block {block_idx}: transaction unexpectedly succeeded (expected failure: {expected_exception})"
                             );
                         }
+                        block_completed = false;
                         break; // Skip to next block
                     }
+                    // EIP-8037: Split gas accounting.
+                    let gas = result.result.gas();
+                    cumulative_tx_gas_used += gas.tx_gas_used();
+                    block_regular_gas_used += gas.block_regular_gas_used();
+                    block_state_gas_used += gas.block_state_gas_used();
                     evm.commit(result.state);
                 }
                 Err(e) => {
@@ -924,6 +946,7 @@ fn execute_blockchain_test(
                                 "⚠️  Skipping block {block_idx} due to unexpected failure: {e:?}"
                             );
                         }
+                        block_completed = false;
                         break; // Skip to next block
                     } else if json_output {
                         // Expected failure
@@ -939,6 +962,32 @@ fn execute_blockchain_test(
             }
         }
 
+        // Validate block gas used against header.
+        // EIP-8037 (Amsterdam+): block gas_used = max(regular_gas, state_gas).
+        // Pre-Amsterdam: block gas_used = cumulative tx_gas_used (includes refunds).
+        if block_completed && !should_fail {
+            if let Some(block_header) = block.block_header.as_ref() {
+                let expected_gas_used = block_header.gas_used.to::<u64>();
+                let actual_block_gas_used = if spec_id.is_enabled_in(SpecId::AMSTERDAM) {
+                    block_regular_gas_used.max(block_state_gas_used)
+                } else {
+                    cumulative_tx_gas_used
+                };
+                if actual_block_gas_used != expected_gas_used {
+                    if print_env_on_error {
+                        eprintln!(
+                            "Block gas used mismatch at block {block_idx}: expected {expected_gas_used}, got {actual_block_gas_used} (regular: {block_regular_gas_used}, state: {block_state_gas_used}, tx: {cumulative_tx_gas_used})"
+                        );
+                    }
+                    return Err(TestExecutionError::BlockGasUsedMismatch {
+                        block_idx,
+                        expected: expected_gas_used,
+                        actual: actual_block_gas_used,
+                    });
+                }
+            }
+        }
+
         // bump bal index
         evm.db_mut().bump_bal_index();
 
@@ -948,7 +997,11 @@ fn execute_blockchain_test(
             &block_env,
             block.withdrawals.as_deref().unwrap_or_default(),
             spec_id,
-        );
+        )
+        .map_err(|e| TestExecutionError::PostBlockSystemCall {
+            block_idx,
+            error: format!("{e:?}"),
+        })?;
 
         // insert present block hash.
         state
@@ -1011,8 +1064,9 @@ fn fork_to_spec_id(fork: ForkSpec) -> SpecId {
         ForkSpec::Byzantium
         | ForkSpec::EIP158ToByzantiumAt5
         | ForkSpec::ByzantiumToConstantinopleFixAt5 => SpecId::BYZANTIUM,
-        ForkSpec::Constantinople | ForkSpec::ByzantiumToConstantinopleAt5 => SpecId::PETERSBURG,
-        ForkSpec::ConstantinopleFix => SpecId::PETERSBURG,
+        ForkSpec::Constantinople
+        | ForkSpec::ByzantiumToConstantinopleAt5
+        | ForkSpec::ConstantinopleFix => SpecId::PETERSBURG,
         ForkSpec::Istanbul => SpecId::ISTANBUL,
         ForkSpec::Berlin => SpecId::BERLIN,
         ForkSpec::London | ForkSpec::BerlinToLondonAt5 => SpecId::LONDON,
@@ -1044,11 +1098,8 @@ fn skip_test(path: &Path) -> bool {
     // Add any problematic tests here that should be skipped
     matches!(
         name,
-        // Test check if gas price overflows, we handle this correctly but does not match tests specific exception.
-        "CreateTransactionHighNonce.json"
-
         // Test with some storage check.
-        | "RevertInCreateInInit_Paris.json"
+        "RevertInCreateInInit_Paris.json"
         | "RevertInCreateInInit.json"
         | "dynamicAccountOverwriteEmpty.json"
         | "dynamicAccountOverwriteEmpty_Paris.json"
@@ -1126,6 +1177,19 @@ pub enum TestExecutionError {
         reason: HaltReason,
         gas_used: u64,
     },
+
+    #[error("Block gas used mismatch at block {block_idx}: expected {expected}, got {actual}")]
+    BlockGasUsedMismatch {
+        block_idx: usize,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error("Pre-block system call failed at block {block_idx}: {error}")]
+    PreBlockSystemCall { block_idx: usize, error: String },
+
+    #[error("Post-block system call failed at block {block_idx}: {error}")]
+    PostBlockSystemCall { block_idx: usize, error: String },
 
     #[error("BAL error")]
     BalMismatchError,

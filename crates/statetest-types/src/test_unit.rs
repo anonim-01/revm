@@ -64,7 +64,7 @@ impl TestUnit {
     ///
     /// A [`CacheState`] object containing the pre-state accounts and storages.
     pub fn state(&self) -> CacheState {
-        let mut cache_state = CacheState::new(false);
+        let mut cache_state = CacheState::new();
         for (address, info) in &self.pre {
             let code_hash = keccak256(&info.code);
             let bytecode = Bytecode::new_raw_checked(info.code.clone())
@@ -107,6 +107,12 @@ impl TestUnit {
                 .unwrap_or(u64::MAX),
             difficulty: self.env.current_difficulty,
             prevrandao: self.env.current_random,
+            slot_num: self
+                .env
+                .slot_number
+                .unwrap_or_default()
+                .try_into()
+                .unwrap_or(u64::MAX),
             ..BlockEnv::default()
         };
 
@@ -154,6 +160,7 @@ mod tests {
                 current_beacon_root: None,
                 current_withdrawals_root: None,
                 current_excess_blob_gas: Some(U256::from(excess_blob_gas)),
+                slot_number: Some(U256::from(1u64)),
             },
             pre: AddressMap::default(),
             post: BTreeMap::default(),

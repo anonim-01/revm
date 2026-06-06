@@ -6,7 +6,7 @@ pub mod inner;
 pub mod warm_addresses;
 
 pub use context_interface::journaled_state::entry::{JournalEntry, JournalEntryTr};
-pub use inner::JournalInner;
+pub use inner::{JournalCfg, JournalInner};
 
 use bytecode::Bytecode;
 use context_interface::{
@@ -66,7 +66,7 @@ impl<DB, ENTRY: JournalEntryTr> Journal<DB, ENTRY> {
     /// Creates a new JournaledState by copying state data from a JournalInit and provided database.
     /// This allows reusing the state, logs, and other data from a previous execution context while
     /// connecting it to a different database backend.
-    pub fn new_with_inner(database: DB, inner: JournalInner<ENTRY>) -> Self {
+    pub const fn new_with_inner(database: DB, inner: JournalInner<ENTRY>) -> Self {
         Self { database, inner }
     }
 
@@ -106,12 +106,13 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
         }
     }
 
-    fn db(&self) -> &Self::Database {
-        &self.database
+    fn db_and_state(&self) -> (&Self::Database, &Self::State) {
+        (&self.database, &self.inner.state)
     }
 
-    fn db_mut(&mut self) -> &mut Self::Database {
-        &mut self.database
+    #[inline]
+    fn db_and_state_mut(&mut self) -> (&mut Self::Database, &mut Self::State) {
+        (&mut self.database, &mut self.inner.state)
     }
 
     fn sload(
@@ -173,11 +174,13 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
         self.inner.warm_addresses.set_access_list(access_list);
     }
 
+    #[inline]
     fn warm_coinbase_account(&mut self, address: Address) {
         self.inner.warm_addresses.set_coinbase(address);
     }
 
-    fn warm_precompiles(&mut self, precompiles: AddressSet) {
+    #[inline]
+    fn warm_precompiles(&mut self, precompiles: &AddressSet) {
         self.inner
             .warm_addresses
             .set_precompile_addresses(precompiles);
@@ -196,7 +199,13 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
 
     #[inline]
     fn set_spec_id(&mut self, spec_id: SpecId) {
-        self.inner.spec = spec_id;
+        self.inner.cfg.spec = spec_id;
+    }
+
+    #[inline]
+    fn set_eip7708_config(&mut self, disabled: bool, delayed_burn_disabled: bool) {
+        self.inner
+            .set_eip7708_config(disabled, delayed_burn_disabled);
     }
 
     #[inline]
@@ -225,7 +234,7 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
     }
 
     #[inline]
-    #[allow(deprecated)]
+    #[expect(deprecated)]
     fn caller_accounting_journal_entry(
         &mut self,
         address: Address,
@@ -249,7 +258,7 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
 
     /// Increments the nonce of the account.
     #[inline]
-    #[allow(deprecated)]
+    #[expect(deprecated)]
     fn nonce_bump_journal_entry(&mut self, address: Address) {
         self.inner.nonce_bump_journal_entry(address)
     }
@@ -264,10 +273,9 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
         &mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Self::JournaledAccount<'_>>, DB::Error> {
+    ) -> Result<StateLoad<Self::JournaledAccount<'_>>, JournalLoadError<DB::Error>> {
         self.inner
             .load_account_mut_optional(&mut self.database, address, skip_cold_load)
-            .map_err(JournalLoadError::unwrap_db_error)
     }
 
     #[inline]
@@ -384,7 +392,7 @@ impl<DB: Database, ENTRY: JournalEntryTr> JournalTr for Journal<DB, ENTRY> {
         load_code: bool,
         skip_cold_load: bool,
     ) -> Result<AccountInfoLoad<'_>, JournalLoadError<<Self::Database as Database>::Error>> {
-        let spec = self.inner.spec;
+        let spec = self.inner.cfg.spec;
         self.inner
             .load_account_optional(&mut self.database, address, load_code, skip_cold_load)
             .map(|a| {

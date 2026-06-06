@@ -13,10 +13,10 @@ use state::Bytecode;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LoadError {
-    /// Database error.
-    DBError,
     /// Cold load skipped.
     ColdLoadSkipped,
+    /// Database error.
+    DBError,
 }
 
 /// Host trait with all methods that are needed by the Interpreter.
@@ -65,6 +65,9 @@ pub trait Host {
 
     /// Gas params contains the dynamic gas constants for the EVM.
     fn gas_params(&self) -> &GasParams;
+
+    /// Returns whether state gas (EIP-8037) is enabled.
+    fn is_amsterdam_eip8037_enabled(&self) -> bool;
 
     /* Database */
 
@@ -161,8 +164,7 @@ pub trait Host {
         );
 
         // load delegate code if account is EIP-7702
-        if let Some(Bytecode::Eip7702(code)) = &account.code {
-            let address = code.address();
+        if let Some(address) = account.code.as_ref().and_then(Bytecode::eip7702_address) {
             let delegate_account = self
                 .load_account_info_skip_cold_load(address, true, false)
                 .ok()?;
@@ -237,6 +239,10 @@ impl Host for DummyHost {
         &self.gas_params
     }
 
+    fn is_amsterdam_eip8037_enabled(&self) -> bool {
+        false
+    }
+
     fn difficulty(&self) -> U256 {
         U256::ZERO
     }
@@ -291,7 +297,7 @@ impl Host for DummyHost {
         _target: Address,
         _skip_cold_load: bool,
     ) -> Result<StateLoad<SelfDestructResult>, LoadError> {
-        Err(LoadError::ColdLoadSkipped)
+        Ok(Default::default())
     }
 
     fn log(&mut self, _log: Log) {}
@@ -308,7 +314,7 @@ impl Host for DummyHost {
         _load_code: bool,
         _skip_cold_load: bool,
     ) -> Result<AccountInfoLoad<'_>, LoadError> {
-        Err(LoadError::DBError)
+        Ok(Default::default())
     }
 
     fn sstore_skip_cold_load(
@@ -318,7 +324,7 @@ impl Host for DummyHost {
         _value: StorageValue,
         _skip_cold_load: bool,
     ) -> Result<StateLoad<SStoreResult>, LoadError> {
-        Err(LoadError::DBError)
+        Ok(Default::default())
     }
 
     fn sload_skip_cold_load(
@@ -327,6 +333,6 @@ impl Host for DummyHost {
         _key: StorageKey,
         _skip_cold_load: bool,
     ) -> Result<StateLoad<StorageValue>, LoadError> {
-        Err(LoadError::DBError)
+        Ok(Default::default())
     }
 }

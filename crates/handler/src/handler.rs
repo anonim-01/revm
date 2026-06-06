@@ -1,6 +1,7 @@
 use crate::{
     evm::FrameTr,
-    execution, post_execution,
+    execution,
+    post_execution::{self, build_result_gas},
     pre_execution::{self, apply_eip7702_auth_list},
     validation, EvmTr, FrameResult, ItemOrResult,
 };
@@ -10,12 +11,11 @@ use context::{
 };
 use context_interface::{
     context::{take_error, ContextError},
-    result::{HaltReasonTr, InvalidHeader, InvalidTransaction},
+    result::{HaltReasonTr, InvalidHeader, InvalidTransaction, ResultGas},
     Cfg, ContextTr, Database, JournalTr, Transaction,
 };
 use interpreter::{interpreter_action::FrameInit, Gas, InitialAndFloorGas, SharedMemory};
 use primitives::U256;
-use state::Bytecode;
 
 /// Trait for errors that can occur during EVM execution.
 ///
@@ -129,8 +129,12 @@ pub trait Handler {
         // call execution and than output.
         match self
             .execution(evm, &init_and_floor_gas)
-            .and_then(|exec_result| self.execution_result(evm, exec_result))
-        {
+            .and_then(|exec_result| {
+                // System calls have no intrinsic gas; build ResultGas from frame result.
+                let gas = exec_result.gas();
+                let result_gas = build_result_gas(false, gas, init_and_floor_gas);
+                self.execution_result(evm, exec_result, result_gas)
+            }) {
             out @ Ok(_) => out,
             Err(e) => self.catch_error(evm, e),
         }
@@ -147,13 +151,21 @@ pub trait Handler {
         &mut self,
         evm: &mut Self::Evm,
     ) -> Result<ExecutionResult<Self::HaltReason>, Self::Error> {
-        let init_and_floor_gas = self.validate(evm)?;
-        let eip7702_refund = self.pre_execution(evm)? as i64;
+        let mut init_and_floor_gas = self.validate(evm)?;
+        let eip7702_refund = self.pre_execution(evm, &mut init_and_floor_gas)?;
+        // Regular refund is returned from pre_execution after state gas split is applied
+        let eip7702_regular_refund = eip7702_refund as i64;
+
         let mut exec_result = self.execution(evm, &init_and_floor_gas)?;
-        self.post_execution(evm, &mut exec_result, init_and_floor_gas, eip7702_refund)?;
+        let result_gas = self.post_execution(
+            evm,
+            &mut exec_result,
+            init_and_floor_gas,
+            eip7702_regular_refund,
+        )?;
 
         // Prepare the output
-        self.execution_result(evm, exec_result)
+        self.execution_result(evm, exec_result, result_gas)
     }
 
     /// Validates the execution environment and transaction parameters.
@@ -176,11 +188,15 @@ pub trait Handler {
     /// For EIP-7702 transactions, applies the authorization list and delegates successful authorizations.
     /// Returns the gas refund amount from EIP-7702. Authorizations are applied before execution begins.
     #[inline]
-    fn pre_execution(&self, evm: &mut Self::Evm) -> Result<u64, Self::Error> {
-        self.validate_against_state_and_deduct_caller(evm)?;
+    fn pre_execution(
+        &self,
+        evm: &mut Self::Evm,
+        init_and_floor_gas: &mut InitialAndFloorGas,
+    ) -> Result<u64, Self::Error> {
+        self.validate_against_state_and_deduct_caller(evm, init_and_floor_gas)?;
         self.load_accounts(evm)?;
 
-        let gas = self.apply_eip7702_auth_list(evm)?;
+        let gas = self.apply_eip7702_auth_list(evm, init_and_floor_gas)?;
         Ok(gas)
     }
 
@@ -193,15 +209,21 @@ pub trait Handler {
         evm: &mut Self::Evm,
         init_and_floor_gas: &InitialAndFloorGas,
     ) -> Result<FrameResult, Self::Error> {
-        let gas_limit = evm.ctx().tx().gas_limit() - init_and_floor_gas.initial_gas;
+        // Compute the regular gas budget and EIP-8037 reservoir for the first frame.
+        let (gas_limit, reservoir) = init_and_floor_gas.initial_gas_and_reservoir(
+            evm.ctx().tx().gas_limit(),
+            evm.ctx().cfg().tx_gas_limit_cap(),
+        );
+
         // Create first frame action
-        let first_frame_input = self.first_frame_input(evm, gas_limit)?;
+        // Note: first_frame_input now handles state gas deduction from the reservoir
+        let first_frame_input = self.first_frame_input(evm, gas_limit, reservoir)?;
 
         // Run execution loop
         let mut frame_result = self.run_exec_loop(evm, first_frame_input)?;
 
         // Handle last frame result
-        self.last_frame_result(evm, &mut frame_result)?;
+        self.last_frame_result(evm, reservoir, &mut frame_result)?;
         Ok(frame_result)
     }
 
@@ -222,9 +244,18 @@ pub trait Handler {
         exec_result: &mut FrameResult,
         init_and_floor_gas: InitialAndFloorGas,
         eip7702_gas_refund: i64,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<ResultGas, Self::Error> {
         // Calculate final refund and add EIP-7702 refund to gas.
         self.refund(evm, exec_result, eip7702_gas_refund);
+
+        // Build ResultGas from the final gas state
+        // This includes all necessary fields and gas values.
+        let result_gas = post_execution::build_result_gas(
+            exec_result.instruction_result().is_halt(),
+            exec_result.gas(),
+            init_and_floor_gas,
+        );
+
         // Ensure gas floor is met and minimum floor gas is spent.
         // if `cfg.is_eip7623_disabled` is true, floor gas will be set to zero
         self.eip7623_check_gas_floor(evm, exec_result, init_and_floor_gas);
@@ -232,7 +263,8 @@ pub trait Handler {
         self.reimburse_caller(evm, exec_result)?;
         // Pay transaction fees to beneficiary
         self.reward_beneficiary(evm, exec_result)?;
-        Ok(())
+        // Build ResultGas from the final gas state
+        Ok(result_gas)
     }
 
     /* VALIDATION */
@@ -257,12 +289,16 @@ pub trait Handler {
         evm: &mut Self::Evm,
     ) -> Result<InitialAndFloorGas, Self::Error> {
         let ctx = evm.ctx_ref();
-        validation::validate_initial_tx_gas(
+        let gas = validation::validate_initial_tx_gas_with_gas_params(
             ctx.tx(),
             ctx.cfg().spec().into(),
+            ctx.cfg().gas_params(),
             ctx.cfg().is_eip7623_disabled(),
-        )
-        .map_err(From::from)
+            ctx.cfg().is_amsterdam_eip8037_enabled(),
+            ctx.cfg().tx_gas_limit_cap(),
+        )?;
+
+        Ok(gas)
     }
 
     /* PRE EXECUTION */
@@ -278,8 +314,12 @@ pub trait Handler {
     ///
     /// Returns the gas refund amount specified by EIP-7702.
     #[inline]
-    fn apply_eip7702_auth_list(&self, evm: &mut Self::Evm) -> Result<u64, Self::Error> {
-        apply_eip7702_auth_list(evm.ctx_mut())
+    fn apply_eip7702_auth_list(
+        &self,
+        evm: &mut Self::Evm,
+        init_and_floor_gas: &mut InitialAndFloorGas,
+    ) -> Result<u64, Self::Error> {
+        apply_eip7702_auth_list(evm.ctx_mut(), init_and_floor_gas)
     }
 
     /// Deducts the maximum possible fee from caller's balance.
@@ -293,6 +333,7 @@ pub trait Handler {
     fn validate_against_state_and_deduct_caller(
         &self,
         evm: &mut Self::Evm,
+        _init_and_floor_gas: &mut InitialAndFloorGas,
     ) -> Result<(), Self::Error> {
         pre_execution::validate_against_state_and_deduct_caller(evm.ctx())
     }
@@ -305,36 +346,18 @@ pub trait Handler {
         &mut self,
         evm: &mut Self::Evm,
         gas_limit: u64,
+        reservoir: u64,
     ) -> Result<FrameInit, Self::Error> {
         let ctx = evm.ctx_mut();
         let mut memory = SharedMemory::new_with_buffer(ctx.local().shared_memory_buffer().clone());
         memory.set_memory_limit(ctx.cfg().memory_limit());
 
-        let (tx, journal) = ctx.tx_journal_mut();
-        let bytecode = if let Some(&to) = tx.kind().to() {
-            let account = &journal.load_account_with_code(to)?.info;
-
-            if let Some(Bytecode::Eip7702(eip7702_bytecode)) = &account.code {
-                let delegated_address = eip7702_bytecode.delegated_address;
-                let account = &journal.load_account_with_code(delegated_address)?.info;
-                Some((
-                    account.code.clone().unwrap_or_default(),
-                    account.code_hash(),
-                ))
-            } else {
-                Some((
-                    account.code.clone().unwrap_or_default(),
-                    account.code_hash(),
-                ))
-            }
-        } else {
-            None
-        };
+        let frame_input = execution::create_init_frame(ctx, gas_limit, reservoir)?;
 
         Ok(FrameInit {
             depth: 0,
             memory,
-            frame_input: execution::create_init_frame(tx, bytecode, gas_limit),
+            frame_input,
         })
     }
 
@@ -343,23 +366,72 @@ pub trait Handler {
     fn last_frame_result(
         &mut self,
         evm: &mut Self::Evm,
+        _original_reservoir: u64,
         frame_result: &mut <<Self::Evm as EvmTr>::Frame as FrameTr>::FrameResult,
     ) -> Result<(), Self::Error> {
         let instruction_result = frame_result.interpreter_result().result;
+
+        // Detect a failed top-level CREATE so the intrinsic `create_state_gas`
+        // charged at tx entry can be unwound below. Mirrors the `create_failed`
+        // condition used in `EthFrame::return_result` for nested creates.
+        let create_failed =
+            matches!(frame_result, FrameResult::Create(_)) && !instruction_result.is_ok();
+
         let gas = frame_result.gas_mut();
         let remaining = gas.remaining();
         let refunded = gas.refunded();
+        let reservoir = gas.reservoir();
+        let state_gas_spent = gas.state_gas_spent();
 
         // Spend the gas limit. Gas is reimbursed when the tx returns successfully.
-        *gas = Gas::new_spent(evm.ctx().tx().gas_limit());
+        *gas = Gas::new_spent_with_reservoir(evm.ctx().tx().gas_limit(), reservoir);
 
         if instruction_result.is_ok_or_revert() {
+            // Return unused regular gas. Reservoir is handled separately via state_gas_spent.
             gas.erase_cost(remaining);
         }
 
         if instruction_result.is_ok() {
             gas.record_refund(refunded);
         }
+
+        // return zero state gas on halt/revert.
+        if instruction_result.is_ok() {
+            gas.set_state_gas_spent(state_gas_spent);
+        } else {
+            gas.set_state_gas_spent(0);
+        }
+
+        // state gas
+        if !instruction_result.is_ok() {
+            // State changes rolled back (revert or halt). Apply the same
+            // invariant used by `handle_reservoir_remaining_gas` to recover
+            // the pre-call reservoir value: signed `reservoir + state_gas_spent`.
+            //
+            // record_state_cost increments state_gas_spent and decrements
+            // reservoir by the same amount; refill_reservoir does the inverse.
+            // Their sum is conserved, so adding the (possibly negative)
+            // state_gas_spent back to the final reservoir recovers the
+            // pre-call (here: pre-tx) value. The negative branch unwinds any
+            // 0→x→0 refill inflation propagated up from descendants — the
+            // grandchild-leak fix at the frame level applied to the top frame.
+            gas.set_reservoir(reservoir.saturating_add_signed(state_gas_spent));
+        }
+
+        // EIP-8037: for a failed top-level CREATE (or one that self-destructs
+        // in init code, see EIP-6780), refund the intrinsic `create_state_gas`
+        // to the reservoir. The nested-create equivalent is
+        // `EthFrame::return_result`'s `refill_reservoir(create_state_gas)`; at
+        // the top level the same charge is deducted in
+        // `initial_gas_and_reservoir` rather than via `record_state_cost`, so
+        // it would otherwise stay consumed when the deployment is rolled back
+        // or erased.
+        if create_failed && evm.ctx().cfg().is_amsterdam_eip8037_enabled() {
+            let ctx = evm.ctx();
+            let state_gas_charged = ctx.cfg().gas_params().create_state_gas();
+            gas.refill_reservoir(state_gas_charged);
+        }
+
         Ok(())
     }
 
@@ -463,10 +535,11 @@ pub trait Handler {
         &mut self,
         evm: &mut Self::Evm,
         result: <<Self::Evm as EvmTr>::Frame as FrameTr>::FrameResult,
+        result_gas: ResultGas,
     ) -> Result<ExecutionResult<Self::HaltReason>, Self::Error> {
         take_error::<Self::Error, _>(evm.ctx().error())?;
 
-        let exec_result = post_execution::output(evm.ctx(), result);
+        let exec_result = post_execution::output(evm.ctx(), result, result_gas);
 
         // commit transaction
         evm.ctx().journal_mut().commit_tx();

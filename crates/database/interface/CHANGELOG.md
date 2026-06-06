@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [12.1.1](https://github.com/bluealloy/revm/compare/revm-database-interface-v12.1.0...revm-database-interface-v12.1.1) - 2026-05-26
+
+### Added
+
+- add `OnStateHook` for `State<DB>` ([#3710](https://github.com/bluealloy/revm/pull/3710))
+
+## [12.1.0](https://github.com/bluealloy/revm/compare/revm-database-interface-v12.0.0...revm-database-interface-v12.1.0) - 2026-05-22
+
+### Added
+
+- *(database)* add is_fatal to DBErrorMarker ([#3704](https://github.com/bluealloy/revm/pull/3704))
+
+## [12.0.0](https://github.com/bluealloy/revm/compare/revm-database-interface-v11.0.1...revm-database-interface-v12.0.0) - 2026-05-19
+
+### Added
+
+- show address or slot in BAL error ([#3619](https://github.com/bluealloy/revm/pull/3619))
+- *(state)* Optimized index type for transaction ID using non-max ([#3610](https://github.com/bluealloy/revm/pull/3610))
+- *(account)* Optimized index type for account ID using `non-max` ([#3605](https://github.com/bluealloy/revm/pull/3605))
+
+### Other
+
+- *(database)* preserve commit_iter semantics ([#3681](https://github.com/bluealloy/revm/pull/3681))
+- update alloy-eip7928 to newer version ([#3627](https://github.com/bluealloy/revm/pull/3627))
+- backport v107 release notes from branch ([#3617](https://github.com/bluealloy/revm/pull/3617))
+- enable and fix clippy::missing_const_for_fn ([#3592](https://github.com/bluealloy/revm/pull/3592))
+- rm op-revm (migrated to ethereum-optimism/optimism) ([#3568](https://github.com/bluealloy/revm/pull/3568))
+
+## [11.0.1](https://github.com/bluealloy/revm/compare/revm-database-interface-v11.0.0...revm-database-interface-v11.0.1) - 2026-04-17
+
+### Other
+
+- updated the following local packages: revm-state
+
+## [11.0.0](https://github.com/bluealloy/revm/compare/revm-database-interface-v10.0.0...revm-database-interface-v11.0.0) - 2026-04-10
+
+### Added
+
+- add crate-level re-exports for all revm-* dependencies ([#3507](https://github.com/bluealloy/revm/pull/3507))
+
+## [10.0.0](https://github.com/bluealloy/revm/compare/revm-database-interface-v9.0.1...revm-database-interface-v10.0.0) - 2026-03-04
+
+### Other
+
+- bump revm-database-interface major version
+
+## [9.0.1](https://github.com/bluealloy/revm/compare/revm-database-interface-v9.0.0...revm-database-interface-v9.0.1) - 2026-03-02
+
+### Fixed
+
+- forward storage_by_account_id in WrapDatabaseRef ([#3441](https://github.com/bluealloy/revm/pull/3441))
+- *(bal)* fix populated account if pre-state was none ([#3357](https://github.com/bluealloy/revm/pull/3357))
+
+### Other
+
+- remove GPL mention and update gmp feature comments ([#3383](https://github.com/bluealloy/revm/pull/3383))
+- use fixed bytes hashmaps from alloy-core ([#3358](https://github.com/bluealloy/revm/pull/3358))
+
 ## [9.0.0](https://github.com/bluealloy/revm/compare/revm-database-interface-v8.0.5...revm-database-interface-v9.0.0) - 2026-01-15
 
 ### Added
